@@ -1,0 +1,23 @@
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+
+use crate::models::{CreateExpectationRequest, MockExpectation};
+use crate::server::MockServer;
+
+/// Handler for setting up a new expectation
+pub async fn handle_setup(
+    State(server): State<MockServer>,
+    Json(request): Json<CreateExpectationRequest>,
+) -> impl IntoResponse {
+    // Create new expectation
+    let expectation: MockExpectation = request.into();
+
+    // Add expectation to server
+    server.add_expectation(expectation.clone()).await;
+
+    // Return created expectation
+    (StatusCode::CREATED, Json(expectation))
+}
