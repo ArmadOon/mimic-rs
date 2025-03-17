@@ -18,12 +18,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          release_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
+          body_path: CHANGELOG.md
 
-  build-and-publish:
-    name: Build and Publish
+  build-and-upload:
+    name: Build and Upload Binaries
     needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
@@ -31,14 +32,14 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
-            artifact_name: rust-mockserver
-            asset_name: rust-mockserver-linux-amd64
+            artifact_name: mimic-rs
+            asset_name: mimic-rs-linux-amd64
           - os: windows-latest
-            artifact_name: rust-mockserver.exe
-            asset_name: rust-mockserver-windows-amd64.exe
+            artifact_name: mimic-rs.exe
+            asset_name: mimic-rs-windows-amd64.exe
           - os: macos-latest
-            artifact_name: rust-mockserver
-            asset_name: rust-mockserver-macos-amd64
+            artifact_name: mimic-rs
+            asset_name: mimic-rs-macos-amd64
 
     steps:
       - uses: actions/checkout@v3
@@ -49,24 +50,22 @@ jobs:
         run: cargo build --release
 
       - name: Prepare artifact
-        if: matrix.os != 'windows-latest'
-        run: |
-          cp target/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
-
-      - name: Prepare artifact (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          cp target/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
         shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp target/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+          else
+            cp target/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+            chmod +x ${{ matrix.asset_name }}
+          fi
 
       - name: Upload Release Asset
-        id: upload-release-asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ${{ matrix.asset_name }}
+          asset_path: ./${{ matrix.asset_name }}
           asset_name: ${{ matrix.asset_name }}
           asset_content_type: application/octet-stream
 
@@ -74,10 +73,9 @@ jobs:
     name: Publish to crates.io
     needs: create-release
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
       - name: Publish to crates.io
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
