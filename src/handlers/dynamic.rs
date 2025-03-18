@@ -26,35 +26,34 @@ pub async fn handle_dynamic_request(
 
     info!("Received request: {} {}", method, path);
 
-    // Extract query parameters
+    // Extract query parameters and headers once
     let query_params = extract_query_params(uri.query());
+    let headers_map = extract_headers(&headers);
 
     // Extract request body
     let body = extract_body(req).await;
 
-    // Record the request
-    let headers_map = extract_headers(&headers);
+    // Record the request - store results before moving/cloning
     server
         .record_request(
             method.to_string(),
-            path.clone(),
-            query_params.clone(),
-            headers_map.clone(),
-            body.clone(),
+            path.to_string(),
+            &query_params,   // Pass a reference to the HashMap
+            &headers_map,    // Pass a reference to the HashMap
+            body.as_deref(), // Convert Option<String> to Option<&str>
         )
         .await;
 
-    // Find matching expectation
+    // Find matching expectation using the same values
     let expectations = server.get_expectations().await;
     if let Some(expectation) = find_matching_expectation(
         &expectations,
-        &method,
-        &path,
+        &method, // Pass a reference to Method
+        &path,   // Pass a reference to String
         &query_params,
-        &headers,
+        &headers, // Pass a reference to HeaderMap
         body.as_deref(),
     ) {
-        // Create response
         return create_response(expectation, server.resource_dir()).await;
     }
 

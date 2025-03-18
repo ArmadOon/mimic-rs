@@ -131,11 +131,17 @@ impl MockServer {
         &self,
         method: String,
         path: String,
-        query_params: HashMap<String, String>,
-        headers: HashMap<String, String>,
-        body: Option<String>,
+        query_params: &HashMap<String, String>,
+        headers: &HashMap<String, String>,
+        body: Option<&str>,
     ) {
-        let record = RequestRecord::new(method, path, query_params, headers, body);
+        let record = RequestRecord::new(
+            method,
+            path,
+            query_params.clone(),   // Clone only when storing
+            headers.clone(),        // Clone only when storing
+            body.map(String::from), // Convert &str to String only when storing
+        );
         let mut request_log = self.request_log.write().await;
         request_log.push(record);
     }
