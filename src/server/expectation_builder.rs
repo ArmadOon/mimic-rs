@@ -5,15 +5,12 @@ use crate::models::MockExpectation;
 
 /// Builder for defining expectations
 pub struct ExpectationBuilder {
-    /// Reference to the server
     server: MockServer,
 
-    /// The expectation being built
     expectation: MockExpectation,
 }
 
 impl ExpectationBuilder {
-    /// Creates a new builder for expectations
     pub(crate) fn new(server: MockServer) -> Self {
         Self {
             server,
@@ -27,6 +24,7 @@ impl ExpectationBuilder {
     /// * `path` - The request path (can contain wildcards '*')
     pub fn path(mut self, path: &str) -> Self {
         self.expectation.path = path.to_string();
+        self.expectation.compile_regex_if_needed();
         self
     }
 
@@ -80,12 +78,10 @@ impl ExpectationBuilder {
 
 /// Builder for defining responses
 pub struct ResponseBuilder {
-    /// Reference to the expectation builder
     expectation_builder: ExpectationBuilder,
 }
 
 impl ResponseBuilder {
-    /// Creates a new builder for responses
     fn new(expectation_builder: ExpectationBuilder) -> Self {
         Self {
             expectation_builder,
@@ -170,7 +166,6 @@ impl ResponseBuilder {
         let server = self.expectation_builder.server.clone();
         let expectation = self.expectation_builder.expectation;
 
-        // Use async blocks for operations with RwLock
         tokio::spawn(async move {
             server.add_expectation(expectation).await;
         });

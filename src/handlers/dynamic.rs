@@ -4,7 +4,6 @@ use axum::{
     http::{HeaderMap, Method, Request, StatusCode},
     response::IntoResponse,
 };
-use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -20,38 +19,34 @@ pub async fn handle_dynamic_request(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let method = req.method().clone();
-    let uri = req.uri().clone();
-    let path = uri.path().to_string();
-    let headers = req.headers().clone();
+    let path = req.uri().path().to_string();
+    let query_string = req.uri().query().map(|q| q.to_string());
+    let headers_map = extract_headers(req.headers());
 
     info!("Received request: {} {}", method, path);
 
-    // Extract query parameters and headers once
-    let query_params = extract_query_params(uri.query());
-    let headers_map = extract_headers(&headers);
+    let query_params = extract_query_params(query_string.as_deref());
 
-    // Extract request body
-    let body = extract_body(req).await;
+    let (_, body) = req.into_parts();
+    let body = extract_body_bytes(body).await;
 
-    // Record the request - store results before moving/cloning
     server
         .record_request(
             method.to_string(),
             path.to_string(),
-            &query_params,   // Pass a reference to the HashMap
-            &headers_map,    // Pass a reference to the HashMap
-            body.as_deref(), // Convert Option<String> to Option<&str>
+            &query_params,
+            &headers_map,
+            body.as_deref(),
         )
         .await;
 
-    // Find matching expectation using the same values
     let expectations = server.get_expectations().await;
     if let Some(expectation) = find_matching_expectation(
         &expectations,
-        &method, // Pass a reference to Method
-        &path,   // Pass a reference to String
+        &method,
+        &path,
         &query_params,
-        &headers, // Pass a reference to HeaderMap
+        &headers_map,
         body.as_deref(),
     ) {
         return create_response(expectation, server.resource_dir()).await;
@@ -93,24 +88,8 @@ fn extract_headers(headers: &HeaderMap) -> HashMap<String, String> {
     result
 }
 
-/// Extracts request body and additional request information
-async fn extract_body(req: Request<Body>) -> Option<String> {
-    // Extract parts of the request
-    let (parts, body) = req.into_parts();
-
-    // Log additional request information if needed
-    debug!(
-        "Processing request: {} {} (version: {:?})",
-        parts.method, parts.uri, parts.version
-    );
-
-    // You could also access:
-    // - parts.extensions
-    // - parts.uri.query()
-    // - parts.uri.host()
-    // - parts.uri.scheme()
-
-    // Read body as bytes
+/// Extracts request body from body parts
+async fn extract_body_bytes(body: Body) -> Option<String> {
     match axum::body::to_bytes(body, usize::MAX).await {
         Ok(bytes) => {
             if bytes.is_empty() {
@@ -133,40 +112,27 @@ fn find_matching_expectation(
     method: &Method,
     path: &str,
     query_params: &HashMap<String, String>,
-    headers: &HeaderMap,
+    headers: &HashMap<String, String>,
     body: Option<&str>,
 ) -> Option<MockExpectation> {
     for exp in expectations {
-        // Check method
         if exp.method != method.as_str() {
             continue;
         }
 
-        // Check path (supports regex)
-        if exp.path.contains('*') {
-            // Convert path with wildcards to regex
-            let regex_path = exp.path.replace('*', ".*");
-            if let Ok(re) = Regex::new(&format!("^{}$", regex_path)) {
-                if !re.is_match(path) {
-                    continue;
-                }
-            } else {
-                // Skip this expectation on regex error
-                continue;
-            }
-        } else if exp.path != path {
+        let path_matches = if let Some(regex) = &exp.path_regex {
+            regex.is_match(path)
+        } else {
+            exp.path == path
+        };
+
+        if !path_matches {
             continue;
         }
 
-        // Check query parameters
         let mut query_params_match = true;
         for (key, value) in &exp.query_params {
-            if let Some(param_value) = query_params.get(key) {
-                if param_value != value {
-                    query_params_match = false;
-                    break;
-                }
-            } else {
+            if query_params.get(key) != Some(value) {
                 query_params_match = false;
                 break;
             }
@@ -175,20 +141,9 @@ fn find_matching_expectation(
             continue;
         }
 
-        // Check headers
         let mut headers_match = true;
         for (key, value) in &exp.headers {
-            if let Some(header_value) = headers.get(key) {
-                if let Ok(header_str) = header_value.to_str() {
-                    if header_str != value {
-                        headers_match = false;
-                        break;
-                    }
-                } else {
-                    headers_match = false;
-                    break;
-                }
-            } else {
+            if headers.get(key) != Some(value) {
                 headers_match = false;
                 break;
             }
@@ -197,18 +152,12 @@ fn find_matching_expectation(
             continue;
         }
 
-        // Check body
         if let Some(exp_body) = &exp.body {
-            if let Some(req_body) = body {
-                if exp_body != req_body {
-                    continue;
-                }
-            } else {
+            if body != Some(exp_body.as_str()) {
                 continue;
             }
         }
 
-        // Return a copy of the matching expectation
         return Some(exp.clone());
     }
 
@@ -218,58 +167,62 @@ fn find_matching_expectation(
 
 /// Creates HTTP response based on expectation
 async fn create_response(
-    expectation: MockExpectation,
+    mut expectation: MockExpectation,
     resource_dir: &FilePath,
 ) -> axum::response::Response {
     // Create response builder
     let status = StatusCode::from_u16(expectation.response.status_code).unwrap_or(StatusCode::OK);
-
     let mut builder = axum::response::Response::builder().status(status);
 
     // Add headers
-    for (key, value) in expectation.response.headers {
-        builder = builder.header(&key, &value);
+    for (key, value) in &expectation.response.headers {
+        builder = builder.header(key, value);
     }
 
     // Return either file or JSON body
-    if let Some(file_name) = expectation.response.body_file {
-        let file_path = resource_dir.join(&file_name);
-        match fs::read_to_string(&file_path) {
-            Ok(content) => {
-                debug!("Loaded file {} for response", file_path.display());
-
-                // Try to parse as JSON
-                match serde_json::from_str::<Value>(&content) {
-                    Ok(json_value) => {
-                        return builder
-                            .header("Content-Type", "application/json")
-                            .body(axum::body::Body::from(
-                                serde_json::to_string(&json_value)
-                                    .unwrap_or_else(|_| "{}".to_string()),
-                            ))
-                            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
-                    }
-                    Err(_) => {
-                        // Return as plain text
-                        return builder
-                            .body(axum::body::Body::from(content))
-                            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
-                    }
+    if let Some(file_name) = &expectation.response.body_file {
+        // Check if we have already cached the file content
+        if expectation.response.cached_file_content.is_none() {
+            let file_path = resource_dir.join(file_name);
+            match fs::read_to_string(&file_path) {
+                Ok(content) => {
+                    debug!("Loaded file {} for response", file_path.display());
+                    expectation.response.cache_file_content(content);
+                }
+                Err(e) => {
+                    error!("Error reading file {}: {}", file_path.display(), e);
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Error reading file: {}", e),
+                    )
+                        .into_response();
                 }
             }
-            Err(e) => {
-                error!("Error reading file {}: {}", file_path.display(), e);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Error reading file: {}", e),
-                )
-                    .into_response();
+        }
+
+        if let Some(content) = &expectation.response.cached_file_content {
+            // Try to parse as JSON
+            match serde_json::from_str::<Value>(content) {
+                Ok(json_value) => {
+                    return builder
+                        .header("Content-Type", "application/json")
+                        .body(axum::body::Body::from(
+                            serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string()),
+                        ))
+                        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+                }
+                Err(_) => {
+                    // Return as plain text
+                    return builder
+                        .body(axum::body::Body::from(content.clone()))
+                        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+                }
             }
         }
-    } else if let Some(body) = expectation.response.body {
+    } else if let Some(body) = &expectation.response.body {
         return builder
             .body(axum::body::Body::from(
-                serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string()),
+                serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string()),
             ))
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }

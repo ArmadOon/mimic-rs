@@ -16,32 +16,14 @@ use crate::models::{MockExpectation, RequestRecord};
 /// Main structure of the MockServer
 #[derive(Clone)]
 pub struct MockServer {
-    /// Storage for expectations
     expectations: Arc<RwLock<Vec<MockExpectation>>>,
 
-    /// Request logs
     request_log: Arc<RwLock<Vec<RequestRecord>>>,
 
-    /// Path to the directory with resources (JSON response files)
     resource_dir: PathBuf,
 }
 
 impl MockServer {
-    /// Creates a new instance of MockServer
-    ///
-    /// # Arguments
-    /// * `resource_dir` - Path to the directory with resources (JSON response files)
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use mimic_rs::MockServer;
-    /// #
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///     let server = MockServer::new("./resources");
-    ///     server.start(8080).await.unwrap();
-    /// }
-    /// ```
     pub fn new<P: Into<PathBuf>>(resource_dir: P) -> Self {
         Self {
             expectations: Arc::new(RwLock::new(Vec::new())),
@@ -121,12 +103,14 @@ impl MockServer {
     /// Adds an expectation to the server
     ///
     /// This method is primarily used by `ExpectationBuilder::build`
-    pub(crate) async fn add_expectation(&self, expectation: MockExpectation) {
+    pub(crate) async fn add_expectation(&self, mut expectation: MockExpectation) {
+        // Ensure the regex is compiled if needed
+        expectation.compile_regex_if_needed();
+
         let mut expectations = self.expectations.write().await;
         expectations.push(expectation);
     }
 
-    /// Records a request
     pub(crate) async fn record_request(
         &self,
         method: String,
@@ -138,15 +122,14 @@ impl MockServer {
         let record = RequestRecord::new(
             method,
             path,
-            query_params.clone(),   // Clone only when storing
-            headers.clone(),        // Clone only when storing
-            body.map(String::from), // Convert &str to String only when storing
+            query_params.clone(),
+            headers.clone(),
+            body.map(String::from),
         );
         let mut request_log = self.request_log.write().await;
         request_log.push(record);
     }
 
-    /// Resets the server (clears all expectations and logs)
     pub async fn reset(&self) {
         {
             let mut expectations = self.expectations.write().await;
@@ -159,19 +142,16 @@ impl MockServer {
         }
     }
 
-    /// Gets a copy of all expectations
     pub async fn get_expectations(&self) -> Vec<MockExpectation> {
         let expectations = self.expectations.read().await;
         expectations.clone()
     }
 
-    /// Gets a copy of all request logs
     pub async fn get_request_log(&self) -> Vec<RequestRecord> {
         let request_log = self.request_log.read().await;
         request_log.clone()
     }
 
-    /// Counts the calls to an endpoint
     pub async fn count_calls(&self, method: &str, path: &str) -> usize {
         let request_log = self.request_log.read().await;
         request_log
@@ -180,7 +160,6 @@ impl MockServer {
             .count()
     }
 
-    /// Returns the path to the resource directory
     pub fn resource_dir(&self) -> &PathBuf {
         &self.resource_dir
     }

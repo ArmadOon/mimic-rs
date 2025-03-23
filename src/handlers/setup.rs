@@ -12,12 +12,9 @@ pub async fn handle_setup(
     State(server): State<MockServer>,
     Json(request): Json<CreateExpectationRequest>,
 ) -> impl IntoResponse {
-    // Create new expectation
     let expectation: MockExpectation = request.into();
 
-    // Add expectation to server
     server.add_expectation(expectation.clone()).await;
 
-    // Return created expectation
     (StatusCode::CREATED, Json(expectation))
 }
