@@ -16,7 +16,7 @@ use crate::models::{MockExpectation, RequestRecord};
 /// Main structure of the MockServer
 #[derive(Clone)]
 pub struct MockServer {
-    expectations: Arc<RwLock<Vec<MockExpectation>>>,
+    expectations: Arc<RwLock<HashMap<String, Vec<MockExpectation>>>>,
 
     request_log: Arc<RwLock<Vec<RequestRecord>>>,
 
@@ -26,7 +26,7 @@ pub struct MockServer {
 impl MockServer {
     pub fn new<P: Into<PathBuf>>(resource_dir: P) -> Self {
         Self {
-            expectations: Arc::new(RwLock::new(Vec::new())),
+            expectations: Arc::new(RwLock::new(HashMap::new())),
             request_log: Arc::new(RwLock::new(Vec::new())),
             resource_dir: resource_dir.into(),
         }
@@ -88,7 +88,6 @@ impl MockServer {
         let addr = SocketAddr::from(([0, 0, 0, 0], port));
         info!("MockServer running at http://{}", addr);
 
-        // For Axum 0.8
         let listener = tokio::net::TcpListener::bind(addr).await?;
         axum::serve(listener, app).await?;
 
@@ -108,7 +107,11 @@ impl MockServer {
         expectation.compile_regex_if_needed();
 
         let mut expectations = self.expectations.write().await;
-        expectations.push(expectation);
+
+        expectations
+            .entry(expectation.method.clone())
+            .or_insert_with(Vec::new)
+            .push(expectation);
     }
 
     pub(crate) async fn record_request(
@@ -144,7 +147,19 @@ impl MockServer {
 
     pub async fn get_expectations(&self) -> Vec<MockExpectation> {
         let expectations = self.expectations.read().await;
-        expectations.clone()
+        expectations
+            .values()
+            .flat_map(|v| v.iter().cloned())
+            .collect()
+    }
+
+    /// Get expectations for a specific method (performance optimization)
+    pub async fn get_expectations_by_method(&self, method: &str) -> Vec<MockExpectation> {
+        let expectations = self.expectations.read().await;
+        match expectations.get(method) {
+            Some(exps) => exps.clone(),
+            None => Vec::new(),
+        }
     }
 
     pub async fn get_request_log(&self) -> Vec<RequestRecord> {

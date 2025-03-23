@@ -1,10 +1,9 @@
 use axum::{
     body::Body,
     extract::State,
-    http::{HeaderMap, Method, Request, StatusCode},
+    http::{HeaderMap, Request, StatusCode},
     response::IntoResponse,
 };
-use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path as FilePath;
@@ -20,30 +19,33 @@ pub async fn handle_dynamic_request(
 ) -> impl IntoResponse {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
-    let query_string = req.uri().query().map(|q| q.to_string());
-    let headers_map = extract_headers(req.headers());
+    let query_string = req.uri().query();
+    let headers = req.headers().clone();
 
     info!("Received request: {} {}", method, path);
 
-    let query_params = extract_query_params(query_string.as_deref());
+    // Extract query params and headers
+    let query_params = extract_query_params(query_string);
+    let headers_map = extract_headers(&headers);
 
+    // Now that we've extracted all needed data, we can consume req
     let (_, body) = req.into_parts();
     let body = extract_body_bytes(body).await;
 
+    // Record the request
     server
         .record_request(
             method.to_string(),
-            path.to_string(),
+            path.clone(),
             &query_params,
             &headers_map,
             body.as_deref(),
         )
         .await;
 
-    let expectations = server.get_expectations().await;
+    let expectations = server.get_expectations_by_method(method.as_str()).await;
     if let Some(expectation) = find_matching_expectation(
         &expectations,
-        &method,
         &path,
         &query_params,
         &headers_map,
@@ -62,22 +64,25 @@ pub async fn handle_dynamic_request(
 
 /// Extracts query parameters from URL
 fn extract_query_params(query: Option<&str>) -> HashMap<String, String> {
-    let mut params = HashMap::new();
+    match query {
+        Some(q) if !q.is_empty() => {
+            let capacity = q.matches('&').count() + 1;
+            let mut params = HashMap::with_capacity(capacity);
 
-    if let Some(q) = query {
-        for pair in q.split('&') {
-            if let Some((key, value)) = pair.split_once('=') {
-                params.insert(key.to_string(), value.to_string());
+            for pair in q.split('&') {
+                if let Some((key, value)) = pair.split_once('=') {
+                    params.insert(key.to_string(), value.to_string());
+                }
             }
+            params
         }
+        _ => HashMap::new(),
     }
-
-    params
 }
 
 /// Extracts HTTP headers
 fn extract_headers(headers: &HeaderMap) -> HashMap<String, String> {
-    let mut result = HashMap::new();
+    let mut result = HashMap::with_capacity(headers.len());
 
     for (name, value) in headers.iter() {
         if let Ok(value_str) = value.to_str() {
@@ -106,20 +111,16 @@ async fn extract_body_bytes(body: Body) -> Option<String> {
     }
 }
 
-/// Finds matching expectation
+/// Finds matching expectation - simplified because we already filtered by method
 fn find_matching_expectation(
     expectations: &[MockExpectation],
-    method: &Method,
     path: &str,
     query_params: &HashMap<String, String>,
     headers: &HashMap<String, String>,
     body: Option<&str>,
 ) -> Option<MockExpectation> {
     for exp in expectations {
-        if exp.method != method.as_str() {
-            continue;
-        }
-
+        // Check path (supports regex)
         let path_matches = if let Some(regex) = &exp.path_regex {
             regex.is_match(path)
         } else {
@@ -161,7 +162,6 @@ fn find_matching_expectation(
         return Some(exp.clone());
     }
 
-    // No matching expectation found
     None
 }
 
@@ -179,9 +179,8 @@ async fn create_response(
         builder = builder.header(key, value);
     }
 
-    // Return either file or JSON body
+    // If we have a file and no cached content yet, load and cache it
     if let Some(file_name) = &expectation.response.body_file {
-        // Check if we have already cached the file content
         if expectation.response.cached_file_content.is_none() {
             let file_path = resource_dir.join(file_name);
             match fs::read_to_string(&file_path) {
@@ -199,31 +198,21 @@ async fn create_response(
                 }
             }
         }
+    }
 
-        if let Some(content) = &expectation.response.cached_file_content {
-            // Try to parse as JSON
-            match serde_json::from_str::<Value>(content) {
-                Ok(json_value) => {
-                    return builder
-                        .header("Content-Type", "application/json")
-                        .body(axum::body::Body::from(
-                            serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string()),
-                        ))
-                        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
-                }
-                Err(_) => {
-                    // Return as plain text
-                    return builder
-                        .body(axum::body::Body::from(content.clone()))
-                        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
-                }
-            }
-        }
-    } else if let Some(body) = &expectation.response.body {
+    // Check if we have pre-serialized JSON content
+    if let Some(json_str) = expectation.response.get_json_string() {
         return builder
-            .body(axum::body::Body::from(
-                serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string()),
-            ))
+            .header("Content-Type", "application/json")
+            .body(axum::body::Body::from(json_str))
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
+
+    // Fallback to other content types
+    if let Some(content) = &expectation.response.cached_file_content {
+        // Return as plain text
+        return builder
+            .body(axum::body::Body::from(content.clone()))
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }
 

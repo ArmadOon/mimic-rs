@@ -18,6 +18,9 @@ pub struct MockResponse {
 
     #[serde(skip)]
     pub cached_file_content: Option<String>,
+
+    #[serde(skip)]
+    pub cached_json_content: Option<Value>,
 }
 
 impl Default for MockResponse {
@@ -28,6 +31,7 @@ impl Default for MockResponse {
             body: None,
             body_file: None,
             cached_file_content: None,
+            cached_json_content: None,
         }
     }
 }
@@ -70,6 +74,20 @@ impl MockResponse {
 
     /// Cache the content of the file to avoid repeated disk reads
     pub fn cache_file_content(&mut self, content: String) {
+        // Try to parse as JSON first
+        if let Ok(json_value) = serde_json::from_str::<Value>(&content) {
+            self.cached_json_content = Some(json_value);
+        }
+
         self.cached_file_content = Some(content);
+    }
+
+    /// Get the pre-serialized JSON string if available
+    pub fn get_json_string(&self) -> Option<String> {
+        match (&self.body, &self.cached_json_content) {
+            (Some(body), _) => serde_json::to_string(body).ok(),
+            (_, Some(json)) => serde_json::to_string(json).ok(),
+            _ => None,
+        }
     }
 }
