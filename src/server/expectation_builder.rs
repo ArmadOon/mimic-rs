@@ -24,6 +24,7 @@ impl ExpectationBuilder {
     /// * `path` - The request path (can contain wildcards '*')
     pub fn path(mut self, path: &str) -> Self {
         self.expectation.path = path.to_string();
+        self.expectation.compile_regex_if_needed();
         self
     }
 

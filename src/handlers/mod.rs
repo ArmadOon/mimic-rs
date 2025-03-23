@@ -7,7 +7,6 @@ use axum::{
     Router,
     routing::{any, post},
 };
-use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 
 use crate::server::MockServer;
