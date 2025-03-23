@@ -19,22 +19,21 @@ pub async fn handle_dynamic_request(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let method = req.method().clone();
-    let uri = req.uri().clone();
-    let path = uri.path().to_string();
-    let headers = req.headers().clone();
+    let path = req.uri().path().to_string();
+    let query_string = req.uri().query().map(|q| q.to_string());
+    let headers_map = extract_headers(req.headers());
 
     info!("Received request: {} {}", method, path);
 
-    let query_params = extract_query_params(uri.query());
-    let headers_map = extract_headers(&headers);
+    let query_params = extract_query_params(query_string.as_deref());
 
     let (_, body) = req.into_parts();
     let body = extract_body_bytes(body).await;
 
     server
         .record_request(
-            method.to_string(),
-            path.clone(),
+            method.to_string(), 
+            path.to_string(),   
             &query_params,
             &headers_map,
             body.as_deref(),
@@ -44,10 +43,10 @@ pub async fn handle_dynamic_request(
     let expectations = server.get_expectations().await;
     if let Some(expectation) = find_matching_expectation(
         &expectations,
-        &method,
-        &path,
+        &method,          
+        &path,             
         &query_params,
-        &headers,
+        &headers_map,      
         body.as_deref(),
     ) {
         return create_response(expectation, server.resource_dir()).await;
@@ -110,10 +109,10 @@ async fn extract_body_bytes(body: Body) -> Option<String> {
 /// Finds matching expectation
 fn find_matching_expectation(
     expectations: &[MockExpectation],
-    method: &Method,
-    path: &str,
+    method: &Method,              
+    path: &str,                   
     query_params: &HashMap<String, String>,
-    headers: &HeaderMap,
+    headers: &HashMap<String, String>, 
     body: Option<&str>,
 ) -> Option<MockExpectation> {
     for exp in expectations {
@@ -133,7 +132,7 @@ fn find_matching_expectation(
 
         let mut query_params_match = true;
         for (key, value) in &exp.query_params {
-            if query_params.get(key).map_or(true, |v| v != value) {
+            if query_params.get(key) != Some(value) {
                 query_params_match = false;
                 break;
             }
@@ -144,11 +143,7 @@ fn find_matching_expectation(
 
         let mut headers_match = true;
         for (key, value) in &exp.headers {
-            if headers
-                .get(key)
-                .and_then(|v| v.to_str().ok())
-                .map_or(true, |v| v != value)
-            {
+            if headers.get(key) != Some(value) {
                 headers_match = false;
                 break;
             }
@@ -158,7 +153,7 @@ fn find_matching_expectation(
         }
 
         if let Some(exp_body) = &exp.body {
-            if body.map_or(true, |b| b != exp_body) {
+            if body != Some(exp_body.as_str()) {
                 continue;
             }
         }
