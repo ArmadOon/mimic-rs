@@ -1,5 +1,9 @@
 # mimic-rs
 
+<div align="center">
+  <img src="assets/mimic-rs-logo.svg" alt="mimic-rs logo" width="200" height="200">
+</div>
+
 ![CI Status](https://github.com/ArmadOon/mimic-rs/workflows/Rust%20CI/badge.svg)
 [![Crates.io](https://img.shields.io/crates/v/mimic-rs.svg)](https://crates.io/crates/mimic-rs)
 [![Documentation](https://docs.rs/mimic-rs/badge.svg)](https://docs.rs/mimic-rs)
