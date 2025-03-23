@@ -32,8 +32,8 @@ pub async fn handle_dynamic_request(
 
     server
         .record_request(
-            method.to_string(), 
-            path.to_string(),   
+            method.to_string(),
+            path.to_string(),
             &query_params,
             &headers_map,
             body.as_deref(),
@@ -43,10 +43,10 @@ pub async fn handle_dynamic_request(
     let expectations = server.get_expectations().await;
     if let Some(expectation) = find_matching_expectation(
         &expectations,
-        &method,          
-        &path,             
+        &method,
+        &path,
         &query_params,
-        &headers_map,      
+        &headers_map,
         body.as_deref(),
     ) {
         return create_response(expectation, server.resource_dir()).await;
@@ -109,10 +109,10 @@ async fn extract_body_bytes(body: Body) -> Option<String> {
 /// Finds matching expectation
 fn find_matching_expectation(
     expectations: &[MockExpectation],
-    method: &Method,              
-    path: &str,                   
+    method: &Method,
+    path: &str,
     query_params: &HashMap<String, String>,
-    headers: &HashMap<String, String>, 
+    headers: &HashMap<String, String>,
     body: Option<&str>,
 ) -> Option<MockExpectation> {
     for exp in expectations {
