@@ -1,7 +1,7 @@
 # mimic-rs
 
 <div align="center">
-  <img src="assets/mimic-rs-logo.svg" alt="mimic-rs logo" width="200" height="200">
+  <img src="assets/mimic-rs-logo.svg" alt="mimic-rs logo" width="400" height="400">
 </div>
 
 ![CI Status](https://github.com/ArmadOon/mimic-rs/workflows/Rust%20CI/badge.svg)
