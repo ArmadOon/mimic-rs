@@ -106,7 +106,7 @@ impl MockServer {
     pub(crate) async fn add_expectation(&self, mut expectation: MockExpectation) {
         // Ensure the regex is compiled if needed
         expectation.compile_regex_if_needed();
-        
+
         let mut expectations = self.expectations.write().await;
         expectations.push(expectation);
     }

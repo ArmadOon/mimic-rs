@@ -107,7 +107,6 @@ async fn extract_body_bytes(body: Body) -> Option<String> {
     }
 }
 
-
 /// Finds matching expectation
 fn find_matching_expectation(
     expectations: &[MockExpectation],
@@ -127,7 +126,7 @@ fn find_matching_expectation(
         } else {
             exp.path == path
         };
-        
+
         if !path_matches {
             continue;
         }
@@ -145,9 +144,11 @@ fn find_matching_expectation(
 
         let mut headers_match = true;
         for (key, value) in &exp.headers {
-            if headers.get(key)
+            if headers
+                .get(key)
                 .and_then(|v| v.to_str().ok())
-                .map_or(true, |v| v != value) {
+                .map_or(true, |v| v != value)
+            {
                 headers_match = false;
                 break;
             }
@@ -211,8 +212,7 @@ async fn create_response(
                     return builder
                         .header("Content-Type", "application/json")
                         .body(axum::body::Body::from(
-                            serde_json::to_string(&json_value)
-                                .unwrap_or_else(|_| "{}".to_string()),
+                            serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string()),
                         ))
                         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
                 }

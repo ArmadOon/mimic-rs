@@ -1,7 +1,7 @@
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use regex::Regex;
 
 use super::response::MockResponse;
 
@@ -42,11 +42,11 @@ impl MockExpectation {
             body: None,
             response: MockResponse::default(),
         };
-        
+
         exp.compile_regex_if_needed();
         exp
     }
-    
+
     /// Compiles the regex if the path contains wildcards
     pub fn compile_regex_if_needed(&mut self) {
         if self.path.contains('*') {
@@ -88,7 +88,7 @@ impl From<CreateExpectationRequest> for MockExpectation {
             body: req.body,
             response: req.response,
         };
-        
+
         // Compile regex for paths with wildcards
         exp.compile_regex_if_needed();
         exp

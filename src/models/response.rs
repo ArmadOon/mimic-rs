@@ -15,7 +15,7 @@ pub struct MockResponse {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_file: Option<String>,
-    
+
     #[serde(skip)]
     pub cached_file_content: Option<String>,
 }
@@ -67,7 +67,7 @@ impl MockResponse {
 
         self
     }
-    
+
     /// Cache the content of the file to avoid repeated disk reads
     pub fn cache_file_content(&mut self, content: String) {
         self.cached_file_content = Some(content);
