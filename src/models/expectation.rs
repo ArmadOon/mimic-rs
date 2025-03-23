@@ -7,28 +7,21 @@ use super::response::MockResponse;
 /// Represents an expectation that the server should fulfill
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MockExpectation {
-    /// Unique identifier of the expectation
     pub id: String,
 
-    /// HTTP Method (GET, POST, PUT, DELETE, etc.)
     pub method: String,
 
-    /// Request path (may contain wildcard characters '*')
     pub path: String,
 
-    /// Expected query parameters
     #[serde(skip_serializing_if = "HashMap::is_empty", default)]
     pub query_params: HashMap<String, String>,
 
-    /// Expected HTTP headers
     #[serde(skip_serializing_if = "HashMap::is_empty", default)]
     pub headers: HashMap<String, String>,
 
-    /// Expected request body
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
 
-    /// Response that the server should return
     pub response: MockResponse,
 }
 
@@ -50,24 +43,18 @@ impl MockExpectation {
 /// Represents a request to create an expectation
 #[derive(Debug, Deserialize)]
 pub struct CreateExpectationRequest {
-    /// HTTP method (GET, POST, PUT, DELETE, etc.)
     pub method: String,
 
-    /// Request path (may contain wildcard characters '*')
     pub path: String,
 
-    /// Expected query parameters
     #[serde(default)]
     pub query_params: HashMap<String, String>,
 
-    /// Expected HTTP headers
     #[serde(default)]
     pub headers: HashMap<String, String>,
 
-    /// Expected request body
     pub body: Option<String>,
 
-    /// Response that the server should return
     pub response: MockResponse,
 }
 

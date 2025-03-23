@@ -7,13 +7,13 @@ use axum::{
     Router,
     routing::{any, post},
 };
+use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 
 use crate::server::MockServer;
 
 /// Create a router for the server
 pub fn create_router(server: MockServer) -> Router {
-    // Create API router
     let api_router = Router::new()
         .route("/_setup", post(setup::handle_setup))
         .route("/_verify", post(verify::handle_verify))
