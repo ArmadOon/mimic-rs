@@ -50,9 +50,17 @@ impl MockExpectation {
     /// Compiles the regex if the path contains wildcards
     pub fn compile_regex_if_needed(&mut self) {
         if self.path.contains('*') {
-            let regex_path = self.path.replace('*', ".*");
-            if let Ok(re) = Regex::new(&format!("^{}$", regex_path)) {
-                self.path_regex = Some(re);
+            // Escape regex special characters except our wildcard
+            let escaped_path = regex::escape(&self.path.replace("*", "WILDCARD_PLACEHOLDER"));
+            let regex_path = escaped_path.replace("WILDCARD_PLACEHOLDER", ".*");
+
+            match Regex::new(&format!("^{}$", regex_path)) {
+                Ok(re) => {
+                    self.path_regex = Some(re);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to compile regex for path '{}': {}", self.path, e);
+                }
             }
         }
     }
@@ -82,7 +90,7 @@ impl From<CreateExpectationRequest> for MockExpectation {
             id: Uuid::new_v4().to_string(),
             method: req.method,
             path: req.path,
-            path_regex: None, // Add the missing field
+            path_regex: None,
             query_params: req.query_params,
             headers: req.headers,
             body: req.body,

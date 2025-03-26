@@ -95,7 +95,10 @@ fn extract_headers(headers: &HeaderMap) -> HashMap<String, String> {
 
 /// Extracts request body from body parts
 async fn extract_body_bytes(body: Body) -> Option<String> {
-    match axum::body::to_bytes(body, usize::MAX).await {
+    // Set a reasonable limit (10MB)
+    const MAX_SIZE: usize = 10 * 1024 * 1024;
+
+    match axum::body::to_bytes(body, MAX_SIZE).await {
         Ok(bytes) => {
             if bytes.is_empty() {
                 None
@@ -103,11 +106,17 @@ async fn extract_body_bytes(body: Body) -> Option<String> {
                 // Convert bytes to string
                 match String::from_utf8(bytes.to_vec()) {
                     Ok(body_string) => Some(body_string),
-                    Err(_) => None,
+                    Err(e) => {
+                        error!("Failed to convert request body to UTF-8: {}", e);
+                        None
+                    }
                 }
             }
         }
-        Err(_) => None,
+        Err(e) => {
+            error!("Failed to read request body: {}", e);
+            None
+        }
     }
 }
 

@@ -21,6 +21,8 @@ pub struct MockServer {
     request_log: Arc<RwLock<Vec<RequestRecord>>>,
 
     resource_dir: PathBuf,
+
+    max_request_log_size: usize,
 }
 
 impl MockServer {
@@ -29,7 +31,13 @@ impl MockServer {
             expectations: Arc::new(RwLock::new(HashMap::new())),
             request_log: Arc::new(RwLock::new(Vec::new())),
             resource_dir: resource_dir.into(),
+            max_request_log_size: 1000,
         }
+    }
+    /// Sets the maximum size of the request log
+    pub fn with_max_log_size(mut self, size: usize) -> Self {
+        self.max_request_log_size = size;
+        self
     }
 
     /// Starts defining an expectation for a path
@@ -51,13 +59,12 @@ impl MockServer {
     ///     .respond()
     ///     .status(200)
     ///     .json_file("user.json")
-    ///     .build();
+    ///     .build().await;
     /// # }
     /// ```
     pub fn expect(&self) -> ExpectationBuilder {
         ExpectationBuilder::new(self.clone())
     }
-
     /// Starts the server on the specified port
     ///
     /// # Example
@@ -76,13 +83,16 @@ impl MockServer {
     ///     .respond()
     ///     .status(200)
     ///     .json_file("user.json")
-    ///     .build();
+    ///     .build().await;
     ///
     /// // Start the server
     /// server.start(8080).await.unwrap();
     /// # }
     /// ```
     pub async fn start(&self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+        // Preload file content before starting
+        self.preload_file_content().await;
+
         let app = self.create_router();
 
         let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -129,8 +139,21 @@ impl MockServer {
             headers.clone(),
             body.map(String::from),
         );
+
         let mut request_log = self.request_log.write().await;
         request_log.push(record);
+
+        // Trim log if it exceeds the maximum size
+        if request_log.len() > self.max_request_log_size {
+            let to_remove = request_log.len() - self.max_request_log_size;
+            request_log.drain(0..to_remove);
+        }
+    }
+
+    /// Clears only the request log without affecting expectations
+    pub async fn clear_request_log(&self) {
+        let mut request_log = self.request_log.write().await;
+        request_log.clear();
     }
 
     pub async fn reset(&self) {
@@ -177,5 +200,33 @@ impl MockServer {
 
     pub fn resource_dir(&self) -> &PathBuf {
         &self.resource_dir
+    }
+
+    /// Preloads content from response files to avoid repeated disk reads
+    pub async fn preload_file_content(&self) {
+        use std::fs;
+        use tracing::error;
+
+        let resource_dir = self.resource_dir.clone();
+        let mut expectations = self.expectations.write().await;
+
+        for exps in expectations.values_mut() {
+            for exp in exps.iter_mut() {
+                if let Some(file_name) = &exp.response.body_file {
+                    if exp.response.cached_file_content.is_none() {
+                        let file_path = resource_dir.join(file_name);
+                        match fs::read_to_string(&file_path) {
+                            Ok(content) => {
+                                info!("Preloaded file {} for response", file_path.display());
+                                exp.response.cache_file_content(content);
+                            }
+                            Err(e) => {
+                                error!("Error reading file {}: {}", file_path.display(), e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
