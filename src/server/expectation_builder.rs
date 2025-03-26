@@ -88,6 +88,22 @@ impl ResponseBuilder {
         }
     }
 
+    fn ensure_content_type(&mut self) {
+        if !self
+            .expectation_builder
+            .expectation
+            .response
+            .headers
+            .contains_key("Content-Type")
+        {
+            self.expectation_builder
+                .expectation
+                .response
+                .headers
+                .insert("Content-Type".to_string(), "application/json".to_string());
+        }
+    }
+
     /// Sets the HTTP status code of the response
     ///
     /// # Arguments
@@ -117,22 +133,7 @@ impl ResponseBuilder {
     /// * `body` - The JSON value as the response body
     pub fn json(mut self, body: Value) -> Self {
         self.expectation_builder.expectation.response.body = Some(body);
-
-        // Adds Content-Type header if it does not exist
-        if !self
-            .expectation_builder
-            .expectation
-            .response
-            .headers
-            .contains_key("Content-Type")
-        {
-            self.expectation_builder
-                .expectation
-                .response
-                .headers
-                .insert("Content-Type".to_string(), "application/json".to_string());
-        }
-
+        self.ensure_content_type();
         self
     }
 
@@ -142,22 +143,7 @@ impl ResponseBuilder {
     /// * `file_path` - The relative path to the JSON file in the resources directory
     pub fn json_file(mut self, file_path: &str) -> Self {
         self.expectation_builder.expectation.response.body_file = Some(file_path.to_string());
-
-        // Adds Content-Type header if it does not exist
-        if !self
-            .expectation_builder
-            .expectation
-            .response
-            .headers
-            .contains_key("Content-Type")
-        {
-            self.expectation_builder
-                .expectation
-                .response
-                .headers
-                .insert("Content-Type".to_string(), "application/json".to_string());
-        }
-
+        self.ensure_content_type();
         self
     }
 
