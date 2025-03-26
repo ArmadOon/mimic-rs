@@ -162,12 +162,10 @@ impl ResponseBuilder {
     }
 
     /// Completes the expectation definition and adds it to the server
-    pub fn build(self) {
+    pub async fn build(self) {
         let server = self.expectation_builder.server.clone();
         let expectation = self.expectation_builder.expectation;
 
-        tokio::spawn(async move {
-            server.add_expectation(expectation).await;
-        });
+        server.add_expectation(expectation).await;
     }
 }

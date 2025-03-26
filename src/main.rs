@@ -4,7 +4,7 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Inicialization of the logger
+    // Initialization of the logger
     tracing_subscriber::fmt::init();
 
     // Get the port from the arguments or use the default 8080

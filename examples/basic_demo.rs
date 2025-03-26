@@ -16,7 +16,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .json(json!({
           "message": "Hello, world!"
         }))
-        .build();
+        .build()
+        .await;
 
     // Define expectations - POST endpoint with body check
     server
@@ -31,7 +32,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
           "name": "John",
           "created": true
         }))
-        .build();
+        .build()
+        .await;
 
     // Define expectations - GET endpoint with response from JSON file
     server
@@ -41,7 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .respond()
         .status(200)
         .json_file("user.json")
-        .build();
+        .build()
+        .await;
 
     println!("Server is running at http://localhost:8080");
     println!("Available endpoints:");
