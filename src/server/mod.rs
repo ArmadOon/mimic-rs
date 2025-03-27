@@ -10,8 +10,8 @@ use tokio::sync::RwLock;
 use tracing::info;
 
 use self::expectation_builder::ExpectationBuilder;
-use crate::handlers;
 use crate::models::{MockExpectation, RequestRecord};
+use crate::{ConditionalResponse, handlers};
 
 /// Main structure of the MockServer
 #[derive(Clone)]
@@ -23,6 +23,7 @@ pub struct MockServer {
     resource_dir: PathBuf,
 
     max_request_log_size: usize,
+    pub(crate) conditional_responses: Arc<RwLock<HashMap<String, ConditionalResponse>>>,
 }
 
 impl MockServer {
@@ -32,6 +33,7 @@ impl MockServer {
             request_log: Arc::new(RwLock::new(Vec::new())),
             resource_dir: resource_dir.into(),
             max_request_log_size: 1000,
+            conditional_responses: Arc::new(RwLock::new(HashMap::new())),
         }
     }
     /// Sets the maximum size of the request log
@@ -228,5 +230,17 @@ impl MockServer {
                 }
             }
         }
+    }
+
+    /// Get a conditional response by ID
+    pub async fn get_conditional_response(&self, id: &str) -> Option<ConditionalResponse> {
+        let responses = self.conditional_responses.read().await;
+        responses.get(id).cloned()
+    }
+
+    /// Add a conditional response to the server
+    pub async fn add_conditional_response(&self, id: String, response: ConditionalResponse) {
+        let mut responses = self.conditional_responses.write().await;
+        responses.insert(id, response);
     }
 }
