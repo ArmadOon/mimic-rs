@@ -1,7 +1,7 @@
-use serde_json::Value;
-
 use super::MockServer;
-use crate::models::MockExpectation;
+use crate::ConditionalResponse;
+use crate::models::{MockExpectation, MockResponse};
+use serde_json::Value;
 
 /// Builder for defining expectations
 pub struct ExpectationBuilder {
@@ -153,5 +153,27 @@ impl ResponseBuilder {
         let expectation = self.expectation_builder.expectation;
 
         server.add_expectation(expectation).await;
+    }
+
+    /// Adds a conditional response to the expectation
+    pub fn conditional<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(usize) -> MockResponse + Send + Sync + 'static,
+    {
+        let conditional_id = format!("cond_{}", uuid::Uuid::new_v4());
+
+        self.expectation_builder.expectation.response.conditional_id = Some(conditional_id.clone());
+
+        let conditional = ConditionalResponse::new(handler);
+
+        let server = self.expectation_builder.server.clone();
+        let cond_id = conditional_id.clone();
+
+        // Spawn task to add the conditional response
+        tokio::spawn(async move {
+            server.add_conditional_response(cond_id, conditional).await;
+        });
+
+        self
     }
 }

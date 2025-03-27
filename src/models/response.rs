@@ -21,6 +21,9 @@ pub struct MockResponse {
 
     #[serde(skip)]
     pub cached_json_content: Option<Value>,
+
+    #[serde(skip)]
+    pub conditional_id: Option<String>,
 }
 
 impl Default for MockResponse {
@@ -32,6 +35,7 @@ impl Default for MockResponse {
             body_file: None,
             cached_file_content: None,
             cached_json_content: None,
+            conditional_id: None,
         }
     }
 }
@@ -89,5 +93,10 @@ impl MockResponse {
             (_, Some(json)) => serde_json::to_string(json).ok(),
             _ => None,
         }
+    }
+
+    pub fn with_conditional_id(mut self, id: String) -> Self {
+        self.conditional_id = Some(id);
+        self
     }
 }

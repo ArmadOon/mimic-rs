@@ -1,3 +1,6 @@
+use crate::models::MockExpectation;
+use crate::models::MockResponse;
+use crate::server::MockServer;
 use axum::{
     body::Body,
     extract::State,
@@ -8,9 +11,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path as FilePath;
 use tracing::{debug, error, info};
-
-use crate::models::MockExpectation;
-use crate::server::MockServer;
 
 /// Handler for processing dynamic requests
 pub async fn handle_dynamic_request(
@@ -51,7 +51,7 @@ pub async fn handle_dynamic_request(
         &headers_map,
         body.as_deref(),
     ) {
-        return create_response(expectation, server.resource_dir()).await;
+        return create_response(expectation, &server, server.resource_dir()).await;
     }
 
     // If no matching expectation is found, return 404
@@ -174,59 +174,67 @@ fn find_matching_expectation(
     None
 }
 
-/// Creates HTTP response based on expectation
-async fn create_response(
-    mut expectation: MockExpectation,
+/// Create response from mock
+async fn create_response_from_mock(
+    mut response: MockResponse,
     resource_dir: &FilePath,
 ) -> axum::response::Response {
-    // Create response builder
-    let status = StatusCode::from_u16(expectation.response.status_code).unwrap_or(StatusCode::OK);
+    let status = StatusCode::from_u16(response.status_code).unwrap_or(StatusCode::OK);
     let mut builder = axum::response::Response::builder().status(status);
 
-    // Add headers
-    for (key, value) in &expectation.response.headers {
+    for (key, value) in &response.headers {
         builder = builder.header(key, value);
     }
 
-    // If we have a file and no cached content yet, load and cache it
-    if let Some(file_name) = &expectation.response.body_file {
-        if expectation.response.cached_file_content.is_none() {
-            let file_path = resource_dir.join(file_name);
-            match fs::read_to_string(&file_path) {
-                Ok(content) => {
-                    debug!("Loaded file {} for response", file_path.display());
-                    expectation.response.cache_file_content(content);
-                }
-                Err(e) => {
-                    error!("Error reading file {}: {}", file_path.display(), e);
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Error reading file: {}", e),
-                    )
-                        .into_response();
-                }
+    if let Some(file_name) = &response.body_file {
+        let file_path = resource_dir.join(file_name);
+        match fs::read_to_string(&file_path) {
+            Ok(content) => {
+                debug!("Loaded file {} for response", file_path.display());
+                response.cache_file_content(content);
+            }
+            Err(e) => {
+                error!("Error reading file {}: {}", file_path.display(), e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error reading file: {}", e),
+                )
+                    .into_response();
             }
         }
     }
 
-    // Check if we have pre-serialized JSON content
-    if let Some(json_str) = expectation.response.get_json_string() {
+    if let Some(json_str) = response.get_json_string() {
         return builder
             .header("Content-Type", "application/json")
             .body(axum::body::Body::from(json_str))
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }
 
-    // Fallback to other content types
-    if let Some(content) = &expectation.response.cached_file_content {
-        // Return as plain text
+    if let Some(content) = &response.cached_file_content {
         return builder
             .body(axum::body::Body::from(content.clone()))
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }
 
-    // Empty response
     builder
         .body(axum::body::Body::empty())
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
+/// Creates HTTP response based on expectation
+async fn create_response(
+    expectation: MockExpectation,
+    server: &MockServer,
+    resource_dir: &FilePath,
+) -> axum::response::Response {
+    if let Some(cond_id) = &expectation.response.conditional_id {
+        let mut conditional_responses = server.conditional_responses.write().await;
+        if let Some(conditional) = conditional_responses.get_mut(cond_id) {
+            let response = conditional.generate_response();
+            return create_response_from_mock(response, resource_dir).await;
+        }
+    }
+
+    create_response_from_mock(expectation.response, resource_dir).await
 }
