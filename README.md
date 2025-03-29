@@ -16,6 +16,7 @@ A flexible, high-performance HTTP mock server for testing HTTP integrations, wri
 - Dynamic request matching based on HTTP method, path, query parameters, headers, and body
 - Fluent API for defining expectations
 - Response templating from JSON files
+- Conditional responses based on request attributes
 - Verification of invocations (count/patterns)
 - Support for wildcard paths using regex patterns
 - Thread-safe design for concurrent tests
@@ -24,6 +25,7 @@ A flexible, high-performance HTTP mock server for testing HTTP integrations, wri
 
 ## Installation
 
+NOT RELEASED YET
 Add mimic-rs to your `Cargo.toml`:
 
 ```toml
@@ -126,42 +128,42 @@ mimic-rs provides flexible request matching:
 ```rust
 // Match by path with wildcard
 server.expect()
-    .path("/api/users/*/profile")
-    .method("GET")
-    .respond()
-    .status(200)
-    .json(json!({"name": "John"}))
-    .build();
+.path("/api/users/*/profile")
+.method("GET")
+.respond()
+.status(200)
+.json(json!({"name": "John"}))
+.build();
 
 // Match with query parameters
 server.expect()
-    .path("/api/search")
-    .method("GET")
-    .query_param("q", "rust")
-    .respond()
-    .status(200)
-    .json(json!({"results": ["Rust Programming"]}))
-    .build();
+.path("/api/search")
+.method("GET")
+.query_param("q", "rust")
+.respond()
+.status(200)
+.json(json!({"results": ["Rust Programming"]}))
+.build();
 
 // Match with headers
 server.expect()
-    .path("/api/protected")
-    .method("GET")
-    .header("Authorization", "Bearer token123")
-    .respond()
-    .status(200)
-    .json(json!({"protected": true}))
-    .build();
+.path("/api/protected")
+.method("GET")
+.header("Authorization", "Bearer token123")
+.respond()
+.status(200)
+.json(json!({"protected": true}))
+.build();
 
 // Match with specific request body
 server.expect()
-    .path("/api/users")
-    .method("POST")
-    .body(r#"{"name":"Alice"}"#)
-    .respond()
-    .status(201)
-    .json(json!({"id": 1, "name": "Alice"}))
-    .build();
+.path("/api/users")
+.method("POST")
+.body(r#"{"name":"Alice"}"#)
+.respond()
+.status(201)
+.json(json!({"id": 1, "name": "Alice"}))
+.build();
 ```
 
 ## HTTP API
@@ -194,7 +196,8 @@ curl -X POST http://localhost:8080/_reset
 
 Integration with Java testing frameworks is currently under development.
 
-In the future, mimic-rs will provide a Java client that allows seamless integration with JUnit and other testing frameworks, making it easy to use this mock server in Java-based tests.
+In the future, mimic-rs will provide a Java client that allows seamless integration with JUnit and other testing
+frameworks, making it easy to use this mock server in Java-based tests.
 
 Currently, you can use mimic-rs with Java applications by:
 
@@ -228,17 +231,17 @@ Fluent API for defining request expectations.
 
 ```rust
 server.expect()
-    .path("/path")           // Set the request path
-    .method("POST")          // Set the HTTP method
-    .query_param("key", "value")  // Add query parameter
-    .header("Content-Type", "application/json")  // Add header
-    .body("{}")              // Set expected body
-    .respond()               // Start defining response
-    .status(201)             // Set response status
-    .header("X-Custom", "value")  // Add response header
-    .json(json!(...))        // Set JSON response body
-    .json_file("file.json")  // Or load from file
-    .build();                // Register the expectation
+.path("/path")           // Set the request path
+.method("POST")          // Set the HTTP method
+.query_param("key", "value")  // Add query parameter
+.header("Content-Type", "application/json")  // Add header
+.body("{}")              // Set expected body
+.respond()               // Start defining response
+.status(201)             // Set response status
+.header("X-Custom", "value")  // Add response header
+.json(json!(...))        // Set JSON response body
+.json_file("file.json")  // Or load from file
+.build();                // Register the expectation
 ```
 
 ## Contributing
