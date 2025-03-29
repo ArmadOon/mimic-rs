@@ -86,7 +86,8 @@ fn extract_headers(headers: &HeaderMap) -> HashMap<String, String> {
 
     for (name, value) in headers.iter() {
         if let Ok(value_str) = value.to_str() {
-            result.insert(name.to_string(), value_str.to_string());
+            let key = name.to_string().to_lowercase();
+            result.insert(key, value_str.to_string());
         }
     }
 
