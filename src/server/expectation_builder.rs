@@ -57,7 +57,7 @@ impl ExpectationBuilder {
     pub fn header(mut self, key: &str, value: &str) -> Self {
         self.expectation
             .headers
-            .insert(key.to_string(), value.to_string());
+            .insert(key.to_lowercase(), value.to_string());
         self
     }
 
